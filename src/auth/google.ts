@@ -1,0 +1,71 @@
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { config } from '../config';
+import { UserRepository, ProfileRepository } from '../db/supabase/repositories';
+import { createChildLogger } from '../utils/logger';
+
+const log = createChildLogger('auth:google');
+
+export const setupGoogleOAuth = (): void => {
+  if (!config.google.clientId || !config.google.clientSecret) {
+    log.warn('Google OAuth not configured — skipping setup');
+    return;
+  }
+
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: config.google.clientId,
+        clientSecret: config.google.clientSecret,
+        callbackURL: config.google.callbackUrl,
+        scope: ['profile', 'email'],
+      },
+      async (_accessToken, _refreshToken, profile, done) => {
+        try {
+          const email = profile.emails?.[0]?.value;
+          if (!email) return done(new Error('No email from Google'));
+
+          // Check if user exists by Google ID
+          let user = await UserRepository.findByGoogleId(profile.id);
+
+          if (!user) {
+            // Check if email exists (account merging)
+            const existing = await UserRepository.findByEmail(email);
+            if (existing) {
+              user = await UserRepository.update(existing.id, {
+                avatar_url: profile.photos?.[0]?.value,
+              });
+            } else {
+              // Create new user
+              user = await UserRepository.create({
+                email,
+                name: profile.displayName ?? email.split('@')[0],
+                avatar_url: profile.photos?.[0]?.value,
+                provider: 'google',
+              });
+
+              // Initialize learning profile for new user
+              await ProfileRepository.create(user.id, {
+                subjects: [],
+                level: 'beginner',
+                learning_style: 'visual',
+                goals: [],
+                weak_topics: [],
+                total_sessions: 0,
+                total_minutes: 0,
+                streak_days: 0,
+              });
+
+              log.info('New Google user created', { userId: user.id });
+            }
+          }
+
+          return done(null, user);
+        } catch (err) {
+          log.error('Google OAuth error', { err });
+          return done(err as Error);
+        }
+      }
+    )
+  );
+};
