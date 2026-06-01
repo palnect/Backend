@@ -60,7 +60,7 @@ export const setupGoogleOAuth = (): void => {
             }
           }
 
-          return done(null, user);
+          return done(null, { ...user, userId: user.id });
         } catch (err) {
           log.error('Google OAuth error', { err });
           return done(err as Error);

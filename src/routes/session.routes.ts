@@ -38,7 +38,7 @@ sessionRouter.post(
 sessionRouter.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const userId = req.user!.userId;
 
     const session = await SessionRepository.findById(id);
@@ -118,7 +118,7 @@ sessionRouter.get(
 sessionRouter.get(
   '/:id/analysis',
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const userId = req.user!.userId;
 
     const session = await SessionRepository.findById(id);

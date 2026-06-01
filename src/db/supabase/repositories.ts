@@ -138,7 +138,7 @@ export const ProfileRepository = {
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
 export const SessionRepository = {
-  async create(data: Omit<TutoringSession, 'id' | 'started_at' | 'messages_count'>): Promise<TutoringSession> {
+  async create(data: Omit<TutoringSession, 'id' | 'started_at' | 'messages_count'> & { id?: string }): Promise<TutoringSession> {
     const db = getSupabaseAdmin();
     const { data: session, error } = await db
       .from('tutoring_sessions')

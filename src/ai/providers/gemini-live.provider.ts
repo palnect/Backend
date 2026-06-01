@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { config } from '../../config';
 import { AIProviderConfig, AIStreamCallbacks } from '../../types';
 import { createChildLogger } from '../../utils/logger';
@@ -25,7 +25,7 @@ export const createGeminiSession = async (
   const liveSession = await ai.live.connect({
     model: config.gemini.model,
     config: {
-      responseModalities: [providerConfig.responseModality === 'audio' ? 'audio' : 'text'],
+      responseModalities: [providerConfig.responseModality === 'audio' ? Modality.AUDIO : Modality.TEXT],
       systemInstruction: {
         parts: [{ text: providerConfig.systemInstruction }],
       },

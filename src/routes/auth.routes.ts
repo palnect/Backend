@@ -174,13 +174,13 @@ authRouter.get(
   '/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: `${config.server.frontendUrl}/auth/error` }),
   (req: Request, res: Response) => {
-    const user = req.user as User;
-    const tokens = generateTokenPair({ userId: user.id, email: user.email });
+    const user = req.user!;
+    const tokens = generateTokenPair({ userId: user.userId, email: user.email });
 
     sendEmail({
       to: user.email,
       subject: 'Welcome to Palnect — Your AI Tutor is Ready',
-      html: welcomeEmailTemplate(user.name, `Welcome to Palnect, ${user.name}! Your AI tutor Lexi is ready to help you learn.`),
+      html: welcomeEmailTemplate(user.name ?? '', `Welcome to Palnect, ${user.name ?? 'there'}! Your AI tutor Lexi is ready to help you learn.`),
     }).catch(() => {});
 
     res.redirect(
