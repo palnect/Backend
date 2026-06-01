@@ -241,6 +241,17 @@ export const AnalysisRepository = {
     if (error) return [];
     return data;
   },
+
+  async findBySessionId(sessionId: string): Promise<SessionAnalysis | null> {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db
+      .from('session_analyses')
+      .select('*')
+      .eq('sessionId', sessionId)
+      .single();
+    if (error) return null;
+    return data;
+  },
 };
 
 // ─── Study Plans ──────────────────────────────────────────────────────────────

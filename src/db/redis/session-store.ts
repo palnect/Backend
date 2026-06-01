@@ -13,6 +13,7 @@ const KEYS = {
   streamBuffer: (sessionId: string) => `stream:${sessionId}:buffer`,
   interruption: (sessionId: string) => `interrupt:${sessionId}`,
   userProfile: (userId: string) => `profile:${userId}`,
+  otp: (email: string) => `otp:${email}`,
 };
 
 // ─── Session State ────────────────────────────────────────────────────────────
@@ -199,5 +200,23 @@ export const ProfileCache = {
 
   async invalidate(userId: string): Promise<void> {
     await getRedisClient().del(KEYS.userProfile(userId));
+  },
+};
+
+// ─── OTP Store ────────────────────────────────────────────────────────────────
+
+const OTP_TTL = 600; // 10 minutes
+
+export const OtpStore = {
+  async set(email: string, hashedOtp: string): Promise<void> {
+    await getRedisClient().set(KEYS.otp(email), hashedOtp, 'EX', OTP_TTL);
+  },
+
+  async get(email: string): Promise<string | null> {
+    return getRedisClient().get(KEYS.otp(email));
+  },
+
+  async delete(email: string): Promise<void> {
+    await getRedisClient().del(KEYS.otp(email));
   },
 };

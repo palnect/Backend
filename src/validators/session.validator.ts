@@ -21,3 +21,10 @@ export const onboardingSchema = Joi.object({
   goals: Joi.array().items(Joi.string()).min(1).max(10).required(),
   availableHoursPerWeek: Joi.number().min(1).max(40).required(),
 });
+
+export const updateProfileSchema = Joi.object({
+  subjects: Joi.array().items(Joi.string()).min(1).max(10),
+  level: Joi.string().valid('beginner', 'intermediate', 'advanced'),
+  learning_style: Joi.string().valid('visual', 'auditory', 'kinesthetic', 'reading'),
+  goals: Joi.array().items(Joi.string()).min(1).max(10),
+}).min(1);

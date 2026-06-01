@@ -12,7 +12,7 @@ const optional = (key: string, fallback: string): string =>
 
 export const config = {
   server: {
-    port: parseInt(optional('PORT', '3000'), 10),
+    port: parseInt(optional('PORT', '5000'), 10),
     env: optional('NODE_ENV', 'development'),
     frontendUrl: optional('FRONTEND_URL', 'http://localhost:5173'),
   },
@@ -42,6 +42,10 @@ export const config = {
   },
   session: {
     ttlSeconds: parseInt(optional('SESSION_TTL_SECONDS', '3600'), 10),
+  },
+  resend: {
+    apiKey: optional('RESEND_API_KEY', ''),
+    fromEmail: optional('RESEND_FROM_EMAIL', 'Palnect <noreply@palnect.app>'),
   },
 } as const;
 
