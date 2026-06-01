@@ -52,7 +52,7 @@ export const RetentionAgent = {
       Keep it to 2-3 sentences. Be warm, specific, and motivating. No markdown. No emojis.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: config.gemini.textModel,
         contents: prompt,
       });
 

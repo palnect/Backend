@@ -70,7 +70,7 @@ export const StudyPlanAgent = {
       - Priority: "high", "medium", or "low"`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: config.gemini.textModel,
         contents: prompt,
       });
 

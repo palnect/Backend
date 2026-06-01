@@ -14,7 +14,7 @@ export const config = {
   server: {
     port: parseInt(optional('PORT', '5000'), 10),
     env: optional('NODE_ENV', 'development'),
-    frontendUrl: optional('FRONTEND_URL', 'http://localhost:5173'),
+    frontendUrl: optional('FRONTEND_URL', 'http://localhost:3000'),
   },
   jwt: {
     secret: optional('JWT_SECRET', 'dev-secret-change-in-prod'),
@@ -34,11 +34,12 @@ export const config = {
   google: {
     clientId: optional('GOOGLE_CLIENT_ID', ''),
     clientSecret: optional('GOOGLE_CLIENT_SECRET', ''),
-    callbackUrl: optional('GOOGLE_CALLBACK_URL', 'http://localhost:3000/auth/google/callback'),
+    callbackUrl: optional('GOOGLE_CALLBACK_URL', 'http://localhost:5000/auth/google/callback'),
   },
   gemini: {
     apiKey: optional('GEMINI_API_KEY', ''),
     model: 'gemini-3.1-flash-live-preview',
+    textModel: 'gemini-2.5-flash',
   },
   session: {
     ttlSeconds: parseInt(optional('SESSION_TTL_SECONDS', '3600'), 10),

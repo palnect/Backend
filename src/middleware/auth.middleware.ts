@@ -55,7 +55,7 @@ export const authenticate = async (
     req.user = { ...payload, name: user.name };
     next();
   } catch (err) {
-    log.error('Auth middleware error', { err });
+    log.error('Auth middleware error', err);
     sendError(res, 'Authentication failed', 500);
   }
 };

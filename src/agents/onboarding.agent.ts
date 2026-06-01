@@ -64,7 +64,7 @@ export const OnboardingAgent = {
       Be concise, warm, and motivating. No markdown.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: config.gemini.textModel,
         contents: prompt,
       });
 
