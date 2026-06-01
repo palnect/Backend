@@ -10,8 +10,8 @@ const log = createChildLogger('middleware:auth');
 
 declare global {
   namespace Express {
-    interface Request {
-      user?: JWTPayload & { name?: string };
+    interface User extends JWTPayload {
+      name?: string;
     }
   }
 }
