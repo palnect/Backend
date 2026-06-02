@@ -43,10 +43,10 @@ export const RetentionAgent = {
       const ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
 
       const weakAreas = profile?.weak_topics?.slice(0, 2).map((t) => t.topic).join(' and ') || '';
-      const subjects = profile?.subjects?.join(', ') || 'your subjects';
+      const field = profile?.field || 'their studies';
 
-      const prompt = `You are Palnect, a friendly AI tutor. Write a SHORT, personalized re-engagement message for ${userName} 
-      who hasn't studied in a few days. They're learning ${subjects}.
+      const prompt = `You are Palnect, a friendly AI tutor. Write a SHORT, personalized re-engagement message for ${userName}
+      who hasn't studied in a few days. They're learning about ${field}.
       ${weakAreas ? `They were struggling with ${weakAreas} — gently mention this as motivation to come back.` : ''}
       
       Keep it to 2-3 sentences. Be warm, specific, and motivating. No markdown. No emojis.`;

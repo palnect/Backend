@@ -129,7 +129,7 @@ profileRouter.patch(
   validate(updateGoalSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    const goalId = req.params.id;
+    const goalId = String(req.params.id);
     const goal = await GoalRepository.update(goalId, userId, req.body);
     sendSuccess(res, goal, 'Goal updated');
   })
@@ -140,7 +140,7 @@ profileRouter.delete(
   '/goals/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    await GoalRepository.delete(req.params.id, userId);
+    await GoalRepository.delete(String(req.params.id), userId);
     sendSuccess(res, null, 'Goal deleted');
   })
 );

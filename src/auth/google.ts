@@ -44,16 +44,15 @@ export const setupGoogleOAuth = (): void => {
                 provider: 'google',
               });
 
-              // Initialize learning profile for new user
+              // Initialize empty profile — completed during onboarding
               await ProfileRepository.create(user.id, {
-                subjects: [],
-                level: 'beginner',
-                learning_style: 'visual',
-                goals: [],
                 weak_topics: [],
                 total_sessions: 0,
                 total_minutes: 0,
                 streak_days: 0,
+                longest_streak: 0,
+                last_session_date: null,
+                onboarded_at: null,
               });
 
               log.info('New Google user created', { userId: user.id });

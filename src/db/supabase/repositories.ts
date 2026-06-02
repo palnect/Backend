@@ -197,7 +197,7 @@ export const SessionRepository = {
     const db = getSupabaseAdmin();
     const { data, error } = await db
       .from('tutoring_sessions')
-      .select('id, topic, field, mode, status, started_at, ended_at, duration_seconds, messages_count')
+      .select('id, user_id, topic, field, mode, status, started_at, ended_at, duration_seconds, messages_count')
       .eq('user_id', userId)
       .gte('started_at', `${date}T00:00:00.000Z`)
       .lt('started_at', `${date}T23:59:59.999Z`)

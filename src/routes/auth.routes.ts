@@ -43,15 +43,15 @@ authRouter.post(
     const password_hash = await hashPassword(password);
     const user = await UserRepository.create({ email, name, provider: 'email', password_hash });
 
+    // Initialize empty profile — completed during onboarding
     await ProfileRepository.create(user.id, {
-      subjects: [],
-      level: 'beginner',
-      learning_style: 'visual',
-      goals: [],
       weak_topics: [],
       total_sessions: 0,
       total_minutes: 0,
       streak_days: 0,
+      longest_streak: 0,
+      last_session_date: null,
+      onboarded_at: null,
     });
 
     const tokens = generateTokenPair({ userId: user.id, email: user.email });

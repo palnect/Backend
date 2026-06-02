@@ -1,73 +1,34 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '../config';
 import { ProfileRepository } from '../db/supabase/repositories';
-import { StudyPlanRepository } from '../db/supabase/repositories';
-import { StudyPlan } from '../types';
 import { createChildLogger } from '../utils/logger';
 
 const log = createChildLogger('agent:study-plan');
 
-/**
- * StudyPlanAgent — Creates and manages personalized multi-week learning paths.
- * Uses Gemini to generate structured study plans based on user profile.
- */
+// StudyPlanAgent is kept for compatibility but the calendar model has replaced
+// the weekly plan concept. This now generates a simple daily suggestion list.
 export const StudyPlanAgent = {
-  async getOrGenerate(userId: string): Promise<StudyPlan> {
-    // Check for recent plan (< 7 days old)
-    const existing = await StudyPlanRepository.findLatestByUserId(userId);
-    if (existing) {
-      const createdAt = new Date(existing.created_at).getTime();
-      const ageMs = Date.now() - createdAt;
-      if (ageMs < 7 * 24 * 60 * 60 * 1000) {
-        return existing;
-      }
-    }
-
-    return this.generate(userId);
-  },
-
-  async generate(userId: string): Promise<StudyPlan> {
-    log.info('Generating study plan', { userId });
-
+  async suggestTopics(userId: string): Promise<{ topics: string[] }> {
     const profile = await ProfileRepository.findByUserId(userId);
-    if (!profile) throw new Error('Profile not found');
+    if (!profile) return { topics: [] };
 
     try {
       const ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
+      const weakAreas = profile.weak_topics?.slice(0, 3).map((t) => t.topic).join(', ') || 'none yet';
 
-      const prompt = `You are an expert curriculum designer for Palnect, an AI tutoring platform.
-      
-      Create a 4-week personalized study plan for this student:
-      - Subjects: ${profile.subjects.join(', ')}
-      - Level: ${profile.level}
-      - Learning style: ${profile.learning_style}
-      - Goals: ${profile.goals.join(', ')}
-      - Weak areas: ${profile.weak_topics?.map((t) => t.topic).join(', ') || 'none identified yet'}
-      
-      Return ONLY a JSON object (no markdown) with this exact structure:
-      {
-        "weeks": [
-          {
-            "week": 1,
-            "topics": [
-              {
-                "subject": "Math",
-                "topic": "Algebra Basics",
-                "estimatedMinutes": 45,
-                "priority": "high"
-              }
-            ]
-          }
-        ]
-      }
-      
-      Rules:
-      - 4 weeks total
-      - 3-5 topics per week
-      - Prioritize weak areas
-      - Build progressively (easier → harder)
-      - Realistic time estimates (20-60 min per topic)
-      - Priority: "high", "medium", or "low"`;
+      const prompt = `You are Lexi, an expert AI tutor on Palnect.
+A ${profile.learner_type?.replace('_', ' ') ?? 'learner'} studying ${profile.field ?? 'various subjects'} wants study suggestions.
+Their goals: ${profile.goals?.join(', ') || 'general learning'}.
+Weak areas to revisit: ${weakAreas}.
+
+Return ONLY a JSON object (no markdown):
+{ "topics": ["topic 1", "topic 2", "topic 3", "topic 4", "topic 5"] }
+
+Rules:
+- 5 specific, actionable study topics
+- Prioritize weak areas
+- Match the learner's field and goals
+- Each topic should be completable in one focused session`;
 
       const response = await ai.models.generateContent({
         model: config.gemini.textModel,
@@ -75,33 +36,13 @@ export const StudyPlanAgent = {
       });
 
       let jsonText = response.text ?? '{}';
-      // Strip any markdown fences
       jsonText = jsonText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonText);
-
-      const plan = await StudyPlanRepository.save({
-        user_id: userId,
-        weeks: parsed.weeks,
-      });
-
-      log.info('Study plan generated', { userId, weeks: parsed.weeks.length });
-      return plan;
+      log.info('Study suggestions generated', { userId, count: parsed.topics?.length });
+      return { topics: parsed.topics ?? [] };
     } catch (err) {
-      log.error('Study plan generation failed', { err, userId });
-      // Fallback generic plan
-      return StudyPlanRepository.save({
-        user_id: userId,
-        weeks: profile.subjects.slice(0, 2).flatMap((subject, i) => [
-          {
-            week: i * 2 + 1,
-            topics: [{ subject, topic: 'Fundamentals', estimatedMinutes: 45, priority: 'high' as const }],
-          },
-          {
-            week: i * 2 + 2,
-            topics: [{ subject, topic: 'Practice Problems', estimatedMinutes: 30, priority: 'medium' as const }],
-          },
-        ]),
-      });
+      log.error('Study suggestion generation failed', { err, userId });
+      return { topics: [] };
     }
   },
 };
