@@ -3,7 +3,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { createSessionSchema } from '../validators/session.validator';
-import { SessionRepository, MessageRepository, ProfileRepository, AnalysisRepository } from '../db/supabase/repositories';
+import { SessionRepository, MessageRepository, AnalysisRepository } from '../db/supabase/repositories';
 import { SessionStore } from '../db/redis/session-store';
 import { sendSuccess, sendCreated, sendError } from '../utils/response';
 import { SessionAnalyzerAgent } from '../agents/session-analyzer.agent';
@@ -15,22 +15,21 @@ export const sessionRouter = Router();
 // All session routes require auth
 sessionRouter.use(authenticate);
 
-// POST /session/create — pre-create session record (WS handles the actual session)
+// POST /session/create — pre-check before WS connection (WS handles the actual session)
 sessionRouter.post(
   '/create',
   validate(createSessionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    const { subject, topic, mode } = req.body;
+    const { topic, mode } = req.body;
 
-    // Check for existing active session
     const activeId = await SessionStore.getActiveSessionForUser(userId);
     if (activeId) {
       sendError(res, 'You already have an active session. End it before starting a new one.', 409);
       return;
     }
 
-    sendCreated(res, { subject, topic, mode, message: 'Ready to connect via WebSocket at /realtime' });
+    sendCreated(res, { topic, mode, message: 'Ready to connect via WebSocket at /realtime' });
   })
 );
 

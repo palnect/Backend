@@ -6,10 +6,6 @@ import { createChildLogger } from '../utils/logger';
 
 const log = createChildLogger('agent:onboarding');
 
-/**
- * OnboardingAgent — Guides new users and initializes their learning profile.
- * Uses Gemini to generate a personalized welcome summary and initial learning strategy.
- */
 export const OnboardingAgent = {
   async run(
     userId: string,
@@ -17,18 +13,21 @@ export const OnboardingAgent = {
   ): Promise<{ profile: LearningProfile; welcomeMessage: string }> {
     log.info('Running onboarding agent', { userId });
 
-    // Update/create the learning profile
     let profile = await ProfileRepository.findByUserId(userId);
 
     const profileData: Partial<LearningProfile> = {
-      subjects: data.subjects,
-      level: data.level,
+      learner_type: data.learnerType,
+      field: data.field,
       learning_style: data.learningStyle,
       goals: data.goals,
+      available_hours_per_day: data.availableHoursPerDay,
       weak_topics: [],
       total_sessions: 0,
       total_minutes: 0,
       streak_days: 0,
+      longest_streak: 0,
+      last_session_date: null,
+      onboarded_at: new Date().toISOString(),
     };
 
     if (profile) {
@@ -37,41 +36,41 @@ export const OnboardingAgent = {
       profile = await ProfileRepository.create(userId, profileData);
     }
 
-    // Generate a personalized welcome message using Gemini
     const welcomeMessage = await this.generateWelcome(data);
 
-    log.info('Onboarding complete', { userId, subjects: data.subjects });
+    log.info('Onboarding complete', { userId, field: data.field, learnerType: data.learnerType });
     return { profile, welcomeMessage };
   },
 
   async generateWelcome(data: OnboardingData): Promise<string> {
     try {
       const ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
-      const prompt = `You are Palnect, a warm and encouraging AI tutor. 
-      A new student has just signed up with the following profile:
-      - Subjects they want to learn: ${data.subjects.join(', ')}
-      - Current level: ${data.level}
-      - Learning style: ${data.learningStyle}
-      - Goals: ${data.goals.join(', ')}
-      - Available hours per week: ${data.availableHoursPerWeek}
-      
-      Write a SHORT, warm, personalized welcome message (3-4 sentences max) that:
-      1. Greets them enthusiastically
-      2. Acknowledges their specific goals
-      3. Sets expectations for what Palnect will help them achieve
-      4. Ends with an encouraging call to action to start their first session
-      
-      Be concise, warm, and motivating. No markdown.`;
+
+      const learnerLabel = data.learnerType.replace('_', ' ');
+      const prompt = `You are Lexi, Palnect's warm and encouraging AI tutor.
+A new learner just joined with this profile:
+- Who they are: ${learnerLabel}
+- Field / area of interest: ${data.field}
+- Learning style: ${data.learningStyle}
+- Goals: ${data.goals.join(', ')}
+- Available time per day: ${data.availableHoursPerDay} hour(s)
+
+Write a SHORT, warm, personalized welcome message (3 sentences max) that:
+1. Greets them and acknowledges who they are (${learnerLabel} in ${data.field})
+2. Briefly connects to their goals
+3. Invites them to start their first session with energy
+
+Be concise, human, and motivating. No markdown. No lists.`;
 
       const response = await ai.models.generateContent({
         model: config.gemini.textModel,
         contents: prompt,
       });
 
-      return response.text ?? 'Welcome to Palnect! Your personalized AI tutor is ready.';
+      return response.text ?? 'Welcome to Palnect! Your AI tutor Lexi is ready to help you grow.';
     } catch (err) {
       log.error('Welcome message generation failed', { err });
-      return `Welcome to Palnect! You're all set to start learning ${data.subjects.join(' and ')}. Let's achieve your goals together!`;
+      return `Welcome to Palnect! You're all set to start learning in ${data.field}. Let's make every session count.`;
     }
   },
 };

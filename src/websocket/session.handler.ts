@@ -1,4 +1,3 @@
-import { WebSocket } from 'ws';
 import {
   AuthenticatedWS,
   WSMessage,
@@ -60,23 +59,21 @@ export const sessionHandler = {
     const sessionId = uuidv4();
 
     try {
-      // Load learner profile for personalization
       const profile = await ProfileRepository.findByUserId(userId);
+      const field = profile?.field ?? 'General';
 
-      // Initialize orchestrator context
       const context = await tutorOrchestrator.initContext(
         sessionId,
         userId,
-        payload.subject,
         payload.topic,
+        field,
         (payload.mode as TutoringMode) ?? 'explain',
-        profile ?? {}
+        profile ?? {},
+        payload.sourceContext,
       );
 
-      // Build personalized system prompt
       const systemPrompt = tutorOrchestrator.buildSystemPrompt(context);
 
-      // Create Gemini Live session
       const geminiSession = await GeminiLiveProvider.createSession(
         sessionId,
         {
@@ -97,30 +94,23 @@ export const sessionHandler = {
 
           onInputTranscript: (text) => {
             send(socket, 'partial_transcript', { text, role: 'user', sessionId });
-            // Persist user message
             MessageRepository.create({
               session_id: sessionId,
               role: 'user',
               content: text,
               content_type: 'audio_transcript',
             }).catch((err) => log.error('Failed to persist user message', { err }));
-
-            // Append to context
             ContextStore.appendMessage(sessionId, 'user', text).catch(() => {});
           },
 
           onOutputTranscript: async (text) => {
             send(socket, 'final_transcript', { text, role: 'assistant', sessionId });
-
-            // Persist AI message
             MessageRepository.create({
               session_id: sessionId,
               role: 'assistant',
               content: text,
               content_type: 'audio_transcript',
             }).catch((err) => log.error('Failed to persist AI message', { err }));
-
-            // Append to context
             await ContextStore.appendMessage(sessionId, 'assistant', text);
             await SessionRepository.incrementMessageCount(sessionId);
           },
@@ -142,41 +132,40 @@ export const sessionHandler = {
         }
       );
 
-      // Register session
       activeSessions.set(sessionId, geminiSession);
       socket.sessionId = sessionId;
 
-      // Persist to Supabase
       await SessionRepository.create({
         id: sessionId,
         user_id: userId,
-        subject: payload.subject,
         topic: payload.topic,
+        field,
+        source_material: payload.sourceContext,
         status: 'active',
         mode: context.mode,
       });
 
-      // Cache in Redis
       await SessionStore.setActive(sessionId, userId, {
-        subject: payload.subject,
         topic: payload.topic,
+        field,
         mode: context.mode,
       });
 
-      log.info('Session started', { sessionId, userId, subject: payload.subject });
+      log.info('Session started', { sessionId, userId, topic: payload.topic });
 
       send(socket, 'session_start', {
         sessionId,
-        subject: payload.subject,
         topic: payload.topic,
+        field,
         mode: context.mode,
       });
 
-      // Send a warm-up greeting from the AI
+      const learnerLabel = profile?.learner_type
+        ? profile.learner_type.replace('_', ' ')
+        : 'learner';
+
       geminiSession.sendText(
-        `Hello! I'm your Palnect tutor. Today we're going to work on ${payload.topic} in ${payload.subject}. ${
-          profile?.level ? `I know you're at a ${profile.level} level, so I'll pitch things just right.` : ''
-        } Shall we get started?`
+        `Hello! I'm Lexi, your Palnect tutor. Today we're working on "${payload.topic}"${field !== 'General' ? ` in ${field}` : ''}. As a ${learnerLabel}, I'll tailor things just right for you. Ready to dive in?`
       );
     } catch (err) {
       log.error('Failed to start session', { err, userId });
@@ -210,7 +199,7 @@ export const sessionHandler = {
 
   // ─── Audio Stream End ───────────────────────────────────────────────────────
 
-  async handleAudioStreamEnd(socket: AuthenticatedWS, sessionId: string): Promise<void> {
+  async handleAudioStreamEnd(_socket: AuthenticatedWS, sessionId: string): Promise<void> {
     const gemini = activeSessions.get(sessionId);
     if (!gemini || gemini.isClosed) return;
     gemini.sendAudioStreamEnd();
@@ -232,16 +221,11 @@ export const sessionHandler = {
     }
 
     try {
-      // Analyze input and potentially adapt the teaching strategy
       const decision = await tutorOrchestrator.analyzeAndDecide(sessionId, text);
 
       if (decision.shouldAdapt) {
         send(socket, 'mode_change', { mode: decision.mode, reason: decision.reason, sessionId });
-        log.info('Orchestrator adapted mode', {
-          sessionId,
-          mode: decision.mode,
-          reason: decision.reason,
-        });
+        log.info('Orchestrator adapted mode', { sessionId, mode: decision.mode, reason: decision.reason });
       }
 
       if (tutorOrchestrator.detectConfusion(text)) {
@@ -258,13 +242,9 @@ export const sessionHandler = {
   // ─── Interruption ───────────────────────────────────────────────────────────
 
   async handleInterruption(socket: AuthenticatedWS, sessionId: string): Promise<void> {
-    // Signal Redis so the Gemini callback stops processing
     await InterruptionStore.signal(sessionId);
     await StreamBuffer.clear(sessionId);
-
-    // Notify client
     send(socket, 'interruption', { sessionId, source: 'user', acknowledged: true });
-
     log.debug('User interruption handled', { sessionId });
   },
 
@@ -281,14 +261,12 @@ export const sessionHandler = {
 
   async cleanupSession(sessionId: string, userId: string): Promise<void> {
     try {
-      // Close Gemini session
       const gemini = activeSessions.get(sessionId);
       if (gemini) {
         gemini.close();
         activeSessions.delete(sessionId);
       }
 
-      // Flush stream buffer and persist
       const buffered = await StreamBuffer.flush(sessionId);
       if (buffered) {
         await MessageRepository.create({
@@ -299,10 +277,8 @@ export const sessionHandler = {
         });
       }
 
-      // End session in Supabase
       await SessionRepository.end(sessionId);
-
-      // Clear Redis state
+      await ProfileRepository.updateStreak(userId);
       await SessionStore.remove(sessionId, userId);
 
       log.info('Session cleaned up', { sessionId, userId });

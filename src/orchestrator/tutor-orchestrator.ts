@@ -100,29 +100,33 @@ export class TutorOrchestrator {
       ? `\nPreferred learning style: ${profile.learning_style}. Adapt your explanations accordingly.`
       : '';
 
-    const levelSection = profile.level
-      ? `\nStudent level: ${profile.level}. Pitch your language and complexity accordingly.`
+    const learnerSection = profile.learner_type
+      ? `\nLearner identity: ${profile.learner_type.replace('_', ' ')}. Calibrate your vocabulary, depth, and tone accordingly.`
+      : '';
+
+    const sourceMaterialSection = context.sourceMaterial
+      ? `\nThe student has provided the following reference material for this session — ground your teaching in it:\n---\n${context.sourceMaterial.slice(0, 3000)}\n---`
       : '';
 
     const recentContext =
       context.messages.length > 0
-        ? `\nRecent conversation context:\n${context.messages
+        ? `\nRecent conversation:\n${context.messages
             .slice(-5)
             .map((m) => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.content}`)
             .join('\n')}`
         : '';
 
-    return `You are Palnect, an expert AI tutor. Your personality is warm, patient, and encouraging.
-You are currently teaching: ${context.subject} — specifically: ${context.topic}
+    return `You are Lexi, Palnect's expert AI tutor. Your personality is warm, patient, and encouraging.
+You are currently helping the student with: "${context.topic}"${context.field && context.field !== 'General' ? ` (field: ${context.field})` : ''}
 
 Current teaching mode: ${context.mode.toUpperCase()}
 ${modeInstruction}
-${levelSection}${styleSection}${weakTopicsSection}
+${learnerSection}${styleSection}${weakTopicsSection}${sourceMaterialSection}
 
 CRITICAL RULES:
 - Keep responses SHORT for voice. Maximum 3-4 sentences per turn.
 - Never use markdown formatting — this is a voice conversation.
-- Always speak naturally as if talking to a student face-to-face.
+- Always speak naturally as if talking to someone face-to-face.
 - If the student interrupts you, acknowledge it immediately and adapt.
 - Be conversational, NOT lecture-like.
 ${recentContext}`;
@@ -236,16 +240,18 @@ ${recentContext}`;
   async initContext(
     sessionId: string,
     userId: string,
-    subject: string,
     topic: string,
+    field: string,
     mode: TutoringMode,
-    profile: Partial<LearningProfile>
+    profile: Partial<LearningProfile>,
+    sourceMaterial?: string,
   ): Promise<ConversationContext> {
     const context: ConversationContext = {
       sessionId,
       userId,
-      subject,
       topic,
+      field,
+      sourceMaterial,
       mode,
       messages: [],
       profile,
@@ -255,7 +261,7 @@ ${recentContext}`;
     };
 
     await ContextStore.set(context);
-    log.debug('Context initialized', { sessionId, subject, topic, mode });
+    log.debug('Context initialized', { sessionId, topic, field, mode });
     return context;
   }
 

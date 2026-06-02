@@ -26,24 +26,38 @@ export interface User {
   updated_at: string;
 }
 
+export type LearnerType =
+  | 'pupil'
+  | 'high_school'
+  | 'undergraduate'
+  | 'msc'
+  | 'phd'
+  | 'professional'
+  | 'self_learner'
+  | 'other';
+
 export interface LearningProfile {
   id: string;
   user_id: string;
-  subjects: string[];
-  level: 'beginner' | 'intermediate' | 'advanced';
+  learner_type: LearnerType;
+  field: string;
   learning_style: 'visual' | 'auditory' | 'kinesthetic' | 'reading';
   goals: string[];
+  available_hours_per_day: number;
   weak_topics: WeakTopic[];
   total_sessions: number;
   total_minutes: number;
   streak_days: number;
+  longest_streak: number;
+  last_session_date: string | null;
+  onboarded_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface WeakTopic {
   topic: string;
-  subject: string;
+  field: string;
   score: number;
   last_tested: string;
 }
@@ -53,8 +67,9 @@ export interface WeakTopic {
 export interface TutoringSession {
   id: string;
   user_id: string;
-  subject: string;
   topic: string;
+  field: string;
+  source_material?: string;
   status: 'active' | 'paused' | 'ended';
   mode: TutoringMode;
   started_at: string;
@@ -62,6 +77,17 @@ export interface TutoringSession {
   duration_seconds?: number;
   messages_count: number;
   summary?: string;
+}
+
+export interface LearningGoal {
+  id: string;
+  user_id: string;
+  title: string;
+  field?: string;
+  scheduled_date?: string;
+  completed_at?: string;
+  linked_session_id?: string;
+  created_at: string;
 }
 
 export type TutoringMode =
@@ -123,9 +149,9 @@ export interface WSAuthPayload {
 }
 
 export interface WSSessionStartPayload {
-  subject: string;
   topic: string;
   mode?: TutoringMode;
+  sourceContext?: string;
 }
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
@@ -133,8 +159,9 @@ export interface WSSessionStartPayload {
 export interface ConversationContext {
   sessionId: string;
   userId: string;
-  subject: string;
   topic: string;
+  field: string;
+  sourceMaterial?: string;
   mode: TutoringMode;
   messages: ContextMessage[];
   profile: Partial<LearningProfile>;
@@ -198,11 +225,11 @@ export interface ApiResponse<T = unknown> {
 // ─── Agents ───────────────────────────────────────────────────────────────────
 
 export interface OnboardingData {
-  subjects: string[];
-  level: 'beginner' | 'intermediate' | 'advanced';
+  learnerType: LearnerType;
+  field: string;
   learningStyle: 'visual' | 'auditory' | 'kinesthetic' | 'reading';
   goals: string[];
-  availableHoursPerWeek: number;
+  availableHoursPerDay: number;
 }
 
 export interface StudyPlan {

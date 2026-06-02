@@ -4,9 +4,9 @@ import {
   LearningProfile,
   TutoringSession,
   SessionMessage,
-  StudyPlan,
   WeakTopic,
   SessionAnalysis,
+  LearningGoal,
 } from '../../types';
 import { createChildLogger } from '../../utils/logger';
 
@@ -116,7 +116,7 @@ export const ProfileRepository = {
 
     const existing = profile.weak_topics || [];
     const idx = existing.findIndex(
-      (t) => t.topic === topic.topic && t.subject === topic.subject
+      (t) => t.topic === topic.topic && t.field === topic.field
     );
     if (idx !== -1) {
       existing[idx] = topic;
@@ -132,6 +132,27 @@ export const ProfileRepository = {
       p_user_id: userId,
       p_minutes: minutesAdded,
     });
+  },
+
+  async updateStreak(userId: string): Promise<void> {
+    const db = getSupabaseAdmin();
+    const profile = await this.findByUserId(userId);
+    if (!profile) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const last = profile.last_session_date;
+
+    if (last === today) return; // already counted today
+
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const newStreak = last === yesterday ? (profile.streak_days || 0) + 1 : 1;
+    const longestStreak = Math.max(profile.longest_streak || 0, newStreak);
+
+    await this.update(userId, {
+      streak_days: newStreak,
+      longest_streak: longestStreak,
+      last_session_date: today,
+    } as Partial<LearningProfile>);
   },
 };
 
@@ -160,7 +181,7 @@ export const SessionRepository = {
     return data;
   },
 
-  async findByUserId(userId: string, limit = 10): Promise<TutoringSession[]> {
+  async findByUserId(userId: string, limit = 20): Promise<TutoringSession[]> {
     const db = getSupabaseAdmin();
     const { data, error } = await db
       .from('tutoring_sessions')
@@ -168,6 +189,19 @@ export const SessionRepository = {
       .eq('user_id', userId)
       .order('started_at', { ascending: false })
       .limit(limit);
+    if (error) return [];
+    return data;
+  },
+
+  async findByUserIdAndDate(userId: string, date: string): Promise<TutoringSession[]> {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db
+      .from('tutoring_sessions')
+      .select('id, topic, field, mode, status, started_at, ended_at, duration_seconds, messages_count')
+      .eq('user_id', userId)
+      .gte('started_at', `${date}T00:00:00.000Z`)
+      .lt('started_at', `${date}T23:59:59.999Z`)
+      .order('started_at', { ascending: true });
     if (error) return [];
     return data;
   },
@@ -254,30 +288,57 @@ export const AnalysisRepository = {
   },
 };
 
-// ─── Study Plans ──────────────────────────────────────────────────────────────
+// ─── Learning Goals ───────────────────────────────────────────────────────────
 
-export const StudyPlanRepository = {
-  async save(plan: Omit<StudyPlan, 'id' | 'created_at'>): Promise<StudyPlan> {
+export const GoalRepository = {
+  async create(data: Omit<LearningGoal, 'id' | 'created_at'>): Promise<LearningGoal> {
     const db = getSupabaseAdmin();
-    const { data, error } = await db
-      .from('study_plans')
-      .insert({ ...plan, created_at: new Date().toISOString() })
+    const { data: goal, error } = await db
+      .from('learning_goals')
+      .insert({ ...data, created_at: new Date().toISOString() })
       .select()
       .single();
-    if (error) throw new Error(`Save study plan failed: ${error.message}`);
+    if (error) throw new Error(`Create goal failed: ${error.message}`);
+    return goal;
+  },
+
+  async findByUserId(userId: string, date?: string): Promise<LearningGoal[]> {
+    const db = getSupabaseAdmin();
+    let query = db
+      .from('learning_goals')
+      .select('*')
+      .eq('user_id', userId)
+      .order('scheduled_date', { ascending: true });
+
+    if (date) {
+      query = query.eq('scheduled_date', date);
+    }
+
+    const { data, error } = await query;
+    if (error) return [];
     return data;
   },
 
-  async findLatestByUserId(userId: string): Promise<StudyPlan | null> {
+  async update(id: string, userId: string, data: Partial<LearningGoal>): Promise<LearningGoal> {
     const db = getSupabaseAdmin();
-    const { data, error } = await db
-      .from('study_plans')
-      .select('*')
+    const { data: goal, error } = await db
+      .from('learning_goals')
+      .update(data)
+      .eq('id', id)
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .select()
       .single();
-    if (error) return null;
-    return data;
+    if (error) throw new Error(`Update goal failed: ${error.message}`);
+    return goal;
+  },
+
+  async delete(id: string, userId: string): Promise<void> {
+    const db = getSupabaseAdmin();
+    const { error } = await db
+      .from('learning_goals')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+    if (error) throw new Error(`Delete goal failed: ${error.message}`);
   },
 };

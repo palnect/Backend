@@ -83,7 +83,7 @@ Rules:
       for (const weakArea of analysis.weakAreasIdentified) {
         await ProfileRepository.addWeakTopic(userId, {
           topic: weakArea,
-          subject: ctx?.subject ?? 'General',
+          field: ctx?.field ?? 'General',
           score: analysis.comprehensionScore,
           last_tested: new Date().toISOString(),
         });

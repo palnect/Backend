@@ -131,12 +131,14 @@ authRouter.get(
   '/me',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
-    const user = await UserRepository.findById(req.user!.userId);
+    const userId = req.user!.userId;
+    const user = await UserRepository.findById(userId);
     if (!user) {
       sendError(res, 'User not found', 404);
       return;
     }
-    sendSuccess(res, sanitizeUser(user));
+    const profile = await ProfileRepository.findByUserId(userId);
+    sendSuccess(res, { ...sanitizeUser(user), isOnboarded: !!profile?.onboarded_at });
   })
 );
 
