@@ -37,9 +37,11 @@ export const setupGoogleOAuth = (): void => {
               });
             } else {
               // Create new user
+              const nameParts = (profile.displayName ?? email.split('@')[0]).split(' ');
               user = await UserRepository.create({
                 email,
-                name: profile.displayName ?? email.split('@')[0],
+                first_name: nameParts[0] ?? email.split('@')[0],
+                last_name: nameParts.slice(1).join(' ') || '',
                 avatar_url: profile.photos?.[0]?.value,
                 provider: 'google',
               });

@@ -92,7 +92,7 @@ authRouter.post(
     }
 
     const tokens = generateTokenPair({ userId: user.id, email: user.email });
-    await AuthCache.setUser(user.id, { name: user.name, email: user.email });
+    await AuthCache.setUser(user.id, { name: `${user.first_name} ${user.last_name}`.trim(), email: user.email });
 
     log.info('User logged in', { userId: user.id });
     sendSuccess(res, { user: sanitizeUser(user), ...tokens }, 'Login successful');
