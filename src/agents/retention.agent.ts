@@ -73,7 +73,7 @@ export const RetentionAgent = {
     const results: Array<{ userId: string; message: string }> = [];
 
     for (const user of inactiveUsers) {
-      const message = await this.generateReEngagementMessage(user.id, user.name);
+      const message = await this.generateReEngagementMessage(user.id, user.first_name ?? user.last_name ?? 'there');
       results.push({ userId: user.id, message });
       // In production: trigger push notification / email here
       log.debug('Re-engagement message generated', { userId: user.id });
