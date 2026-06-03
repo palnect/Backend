@@ -182,7 +182,7 @@ authRouter.get(
 
     // Only send welcome email for brand-new Google sign-ups
     if (user.isNewUser) {
-      const displayName = user.first_name ?? user.name ?? 'there';
+      const displayName = user.first_name ?? 'there';
       sendEmail({
         to: user.email,
         subject: 'Welcome to Palnect — Your AI Tutor is Ready',
@@ -217,7 +217,7 @@ authRouter.post(
     await sendEmail({
       to: email,
       subject: 'Your Palnect Password Reset Code',
-      html: otpEmailTemplate(user.name, otp),
+      html: otpEmailTemplate(user.first_name, otp),
     });
 
     log.info('OTP sent for password reset', { userId: user.id });

@@ -51,8 +51,9 @@ export const authenticate = async (
     }
 
     // Cache user data
-    await AuthCache.setUser(payload.userId, { name: user.name, email: user.email });
-    req.user = { ...payload, name: user.name };
+    const displayName = `${user.first_name} ${user.last_name}`.trim();
+    await AuthCache.setUser(payload.userId, { name: displayName, email: user.email });
+    req.user = { ...payload, name: displayName };
     next();
   } catch (err) {
     log.error('Auth middleware error', err);

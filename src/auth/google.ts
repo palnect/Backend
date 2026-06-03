@@ -2,6 +2,7 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { config } from '../config';
 import { UserRepository, ProfileRepository } from '../db/supabase/repositories';
+import { User } from '../types';
 import { createChildLogger } from '../utils/logger';
 
 const log = createChildLogger('auth:google');
