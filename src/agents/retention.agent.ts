@@ -14,14 +14,14 @@ export const RetentionAgent = {
   /**
    * Find users who haven't logged a session in N days
    */
-  async getInactiveUsers(inactiveDays = 3): Promise<Array<{ id: string; name: string; email: string }>> {
+  async getInactiveUsers(inactiveDays = 3): Promise<Array<{ id: string; first_name: string; last_name: string; email: string }>> {
     const db = getSupabaseAdmin();
     const cutoff = new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000).toISOString();
 
     // Users who haven't had a session since cutoff
     const { data, error } = await db
       .from('users')
-      .select('id, name, email')
+      .select('id, first_name, last_name, email')
       .lt('last_session_at', cutoff)
       .not('last_session_at', 'is', null)
       .limit(100);
@@ -73,7 +73,7 @@ export const RetentionAgent = {
     const results: Array<{ userId: string; message: string }> = [];
 
     for (const user of inactiveUsers) {
-      const message = await this.generateReEngagementMessage(user.id, user.first_name ?? user.last_name ?? 'there');
+      const message = await this.generateReEngagementMessage(user.id, user.first_name || 'there');
       results.push({ userId: user.id, message });
       // In production: trigger push notification / email here
       log.debug('Re-engagement message generated', { userId: user.id });
