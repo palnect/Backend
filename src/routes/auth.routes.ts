@@ -176,14 +176,18 @@ authRouter.get(
   '/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: `${config.server.frontendUrl}/auth/error` }),
   (req: Request, res: Response) => {
-    const user = req.user!;
+    const user = req.user! as { userId: string; email: string; name?: string; first_name?: string; isNewUser?: boolean };
     const tokens = generateTokenPair({ userId: user.userId, email: user.email });
 
-    sendEmail({
-      to: user.email,
-      subject: 'Welcome to Palnect — Your AI Tutor is Ready',
-      html: welcomeEmailTemplate(user.name ?? '', `Welcome to Palnect, ${user.name ?? 'there'}! Your AI tutor Lexi is ready to help you learn.`),
-    }).catch(() => {});
+    // Only send welcome email for brand-new Google sign-ups
+    if (user.isNewUser) {
+      const displayName = user.first_name ?? user.name ?? 'there';
+      sendEmail({
+        to: user.email,
+        subject: 'Welcome to Palnect — Your AI Tutor is Ready',
+        html: welcomeEmailTemplate(displayName, `Welcome to Palnect, ${displayName}! Your AI tutor Lexi is ready to help you learn.`),
+      }).catch(() => {});
+    }
 
     res.redirect(
       `${config.server.frontendUrl}/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`

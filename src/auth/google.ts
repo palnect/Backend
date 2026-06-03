@@ -56,10 +56,11 @@ export const setupGoogleOAuth = (): void => {
               });
 
               log.info('New Google user created', { userId: user.id });
+              return done(null, { ...user, userId: user.id, isNewUser: true } as User & { userId: string; isNewUser: boolean });
             }
           }
 
-          return done(null, { ...user, userId: user.id });
+          return done(null, { ...user, userId: user.id, isNewUser: false } as User & { userId: string; isNewUser: boolean });
         } catch (err) {
           log.error('Google OAuth error', { err });
           return done(err as Error);
