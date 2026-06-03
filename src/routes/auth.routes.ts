@@ -32,7 +32,7 @@ authRouter.post(
   '/signup',
   validate(signupSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { email, password, name } = req.body;
+    const { email, password, first_name, last_name } = req.body;
 
     const existing = await UserRepository.findByEmail(email);
     if (existing) {
@@ -41,7 +41,7 @@ authRouter.post(
     }
 
     const password_hash = await hashPassword(password);
-    const user = await UserRepository.create({ email, name, provider: 'email', password_hash });
+    const user = await UserRepository.create({ email, first_name, last_name, provider: 'email', password_hash });
 
     // Initialize empty profile — completed during onboarding
     await ProfileRepository.create(user.id, {
@@ -59,7 +59,7 @@ authRouter.post(
     sendEmail({
       to: email,
       subject: 'Welcome to Palnect — Your AI Tutor is Ready',
-      html: welcomeEmailTemplate(name, `Welcome to Palnect, ${name}! Your AI tutor Lexi is ready to help you learn. Start your first session and experience conversational AI tutoring.`),
+      html: welcomeEmailTemplate(first_name, `Welcome to Palnect, ${first_name}! Your AI tutor Lexi is ready to help you learn. Start your first session and experience conversational AI tutoring.`),
     }).catch(() => {});
 
     log.info('User signed up', { userId: user.id });
@@ -148,10 +148,11 @@ authRouter.patch(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    const { name, avatar_url } = req.body as { name?: string; avatar_url?: string };
+    const { first_name, last_name, avatar_url } = req.body as { first_name?: string; last_name?: string; avatar_url?: string };
 
     const updates: Partial<User> & { password_hash?: string } = {};
-    if (name && typeof name === 'string' && name.trim().length >= 2) updates.name = name.trim();
+    if (first_name && typeof first_name === 'string' && first_name.trim().length >= 1) updates.first_name = first_name.trim();
+    if (last_name && typeof last_name === 'string' && last_name.trim().length >= 1) updates.last_name = last_name.trim();
     if (avatar_url && typeof avatar_url === 'string') updates.avatar_url = avatar_url;
 
     if (Object.keys(updates).length === 0) {

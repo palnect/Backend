@@ -11,7 +11,8 @@ export const signupSchema = Joi.object({
       'string.pattern.base':
         'Password must contain at least one uppercase letter, one lowercase letter, and one number',
     }),
-  name: Joi.string().min(2).max(100).trim().required(),
+  first_name: Joi.string().min(1).max(50).trim().required(),
+  last_name: Joi.string().min(1).max(50).trim().required(),
 });
 
 export const loginSchema = Joi.object({
