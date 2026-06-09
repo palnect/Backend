@@ -7,6 +7,10 @@ import {
   WeakTopic,
   SessionAnalysis,
   LearningGoal,
+  DocumentSession,
+  DocumentSectionProgress,
+  DocSection,
+  SectionStatus,
 } from '../../types';
 import { createChildLogger } from '../../utils/logger';
 
@@ -340,5 +344,166 @@ export const GoalRepository = {
       .eq('id', id)
       .eq('user_id', userId);
     if (error) throw new Error(`Delete goal failed: ${error.message}`);
+  },
+};
+
+// ─── Document Sessions ────────────────────────────────────────────────────────
+
+export const DocumentSessionRepository = {
+  async create(data: {
+    session_id: string;
+    user_id: string;
+    file_name: string;
+    file_type: 'pdf' | 'docx' | 'txt';
+    total_sections: number;
+    total_pages: number;
+    sections?: DocSection[];
+  }): Promise<DocumentSession> {
+    const db = getSupabaseAdmin();
+    const { data: doc, error } = await db
+      .from('document_sessions')
+      .insert({
+        session_id: data.session_id,
+        user_id: data.user_id,
+        file_name: data.file_name,
+        file_type: data.file_type,
+        total_sections: data.total_sections,
+        total_pages: data.total_pages,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    if (error) throw new Error(`Create document session failed: ${error.message}`);
+    return doc;
+  },
+
+  async findBySessionId(sessionId: string): Promise<DocumentSession | null> {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db
+      .from('document_sessions')
+      .select('*')
+      .eq('session_id', sessionId)
+      .single();
+    if (error) return null;
+    return data;
+  },
+
+  async findRecentByUserAndFile(
+    userId: string,
+    fileName: string,
+    topic: string
+  ): Promise<(DocumentSession & { topic: string }) | null> {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db
+      .from('document_sessions')
+      .select('*, tutoring_sessions!inner(topic, status)')
+      .eq('user_id', userId)
+      .eq('file_name', fileName)
+      .eq('tutoring_sessions.topic', topic)
+      .eq('tutoring_sessions.status', 'ended')
+      .not('resume_section_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    if (error) return null;
+    return data as (DocumentSession & { topic: string });
+  },
+
+  async updateResume(sessionId: string, sectionId: string, page: number): Promise<void> {
+    const db = getSupabaseAdmin();
+    await db
+      .from('document_sessions')
+      .update({ resume_section_id: sectionId, resume_page: page, updated_at: new Date().toISOString() })
+      .eq('session_id', sessionId);
+  },
+
+  async linkGoal(sessionId: string, goalId: string): Promise<void> {
+    const db = getSupabaseAdmin();
+    await db
+      .from('document_sessions')
+      .update({ linked_goal_id: goalId, updated_at: new Date().toISOString() })
+      .eq('session_id', sessionId);
+  },
+
+  async updateSectionCounts(sessionId: string, total: number, done: number): Promise<void> {
+    const db = getSupabaseAdmin();
+    await db
+      .from('document_sessions')
+      .update({ total_sections: total, updated_at: new Date().toISOString() })
+      .eq('session_id', sessionId);
+    // update linked goal's done count if exists
+    const doc = await this.findBySessionId(sessionId);
+    if (doc?.linked_goal_id) {
+      const dbClient = getSupabaseAdmin();
+      await dbClient
+        .from('learning_goals')
+        .update({ doc_sections_done: done })
+        .eq('id', doc.linked_goal_id);
+    }
+  },
+};
+
+// ─── Section Progress ─────────────────────────────────────────────────────────
+
+export const SectionProgressRepository = {
+  async upsert(data: {
+    session_id: string;
+    user_id: string;
+    section_id: string;
+    section_title?: string;
+    page: number;
+    status: SectionStatus;
+  }): Promise<void> {
+    const db = getSupabaseAdmin();
+    const now = new Date().toISOString();
+    await db.from('document_section_progress').upsert(
+      {
+        ...data,
+        started_at: data.status === 'in_progress' ? now : undefined,
+        completed_at: data.status === 'done' ? now : undefined,
+      },
+      { onConflict: 'session_id,section_id' }
+    );
+  },
+
+  async markInProgress(sessionId: string, sectionId: string): Promise<void> {
+    const db = getSupabaseAdmin();
+    await db
+      .from('document_section_progress')
+      .update({ status: 'in_progress', started_at: new Date().toISOString() })
+      .eq('session_id', sessionId)
+      .eq('section_id', sectionId);
+  },
+
+  async markDone(sessionId: string, sectionId: string): Promise<void> {
+    const db = getSupabaseAdmin();
+    await db
+      .from('document_section_progress')
+      .update({ status: 'done', completed_at: new Date().toISOString() })
+      .eq('session_id', sessionId)
+      .eq('section_id', sectionId);
+  },
+
+  async getDoneCount(sessionId: string): Promise<number> {
+    const db = getSupabaseAdmin();
+    const { count, error } = await db
+      .from('document_section_progress')
+      .select('*', { count: 'exact', head: true })
+      .eq('session_id', sessionId)
+      .eq('status', 'done');
+    if (error) return 0;
+    return count ?? 0;
+  },
+
+  async findBySessionId(sessionId: string): Promise<DocumentSectionProgress[]> {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db
+      .from('document_section_progress')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('page', { ascending: true });
+    if (error) return [];
+    return data;
   },
 };
