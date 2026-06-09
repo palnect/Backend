@@ -88,7 +88,47 @@ export interface LearningGoal {
   scheduled_date?: string;
   completed_at?: string;
   linked_session_id?: string;
+  doc_session_id?: string;
+  doc_sections_total?: number;
+  doc_sections_done?: number;
   created_at: string;
+}
+
+// ─── Document Study Mode ──────────────────────────────────────────────────────
+
+export interface DocSection {
+  sectionId: string;
+  title: string;
+  page: number;
+}
+
+export type SectionStatus = 'not_started' | 'in_progress' | 'done';
+
+export interface DocumentSession {
+  id: string;
+  session_id: string;
+  user_id: string;
+  file_name: string;
+  file_type: 'pdf' | 'docx' | 'txt';
+  total_sections: number;
+  total_pages: number;
+  resume_section_id?: string;
+  resume_page?: number;
+  linked_goal_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentSectionProgress {
+  id: string;
+  session_id: string;
+  user_id: string;
+  section_id: string;
+  section_title?: string;
+  page: number;
+  status: SectionStatus;
+  started_at?: string;
+  completed_at?: string;
 }
 
 export type TutoringMode =
@@ -130,6 +170,10 @@ export type WSEventType =
   | 'confusion_detected'
   | 'session_reconnecting'
   | 'session_reconnected'
+  | 'highlight_section'
+  | 'doc_section_update'
+  | 'doc_session_start'
+  | 'doc_section_ack'
   | 'error'
   | 'ping'
   | 'pong';
@@ -155,6 +199,27 @@ export interface WSSessionStartPayload {
   topic: string;
   mode?: TutoringMode;
   sourceContext?: string;
+}
+
+export interface WSDocSessionStartPayload extends WSSessionStartPayload {
+  hasDocument: true;
+  fileName: string;
+  fileType: 'pdf' | 'docx' | 'txt';
+  totalPages: number;
+  sections: DocSection[];
+  resumeFromSectionId?: string;
+}
+
+export interface WSHighlightSectionPayload {
+  sessionId: string;
+  page: number;
+  sectionId: string;
+  sectionTitle?: string;
+}
+
+export interface WSDocSectionAckPayload {
+  sectionId: string;
+  page: number;
 }
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
