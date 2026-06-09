@@ -2,12 +2,21 @@ import {
   AuthenticatedWS,
   WSMessage,
   WSSessionStartPayload,
+  WSDocSessionStartPayload,
+  WSDocSectionAckPayload,
   WSAudioChunk,
   TutoringMode,
 } from '../types';
 import { send } from './ws-server';
-import { SessionStore, StreamBuffer, InterruptionStore, ContextStore } from '../db/redis/session-store';
-import { SessionRepository, MessageRepository, ProfileRepository } from '../db/supabase/repositories';
+import { SessionStore, StreamBuffer, InterruptionStore, ContextStore, DocSectionStore } from '../db/redis/session-store';
+import {
+  SessionRepository,
+  MessageRepository,
+  ProfileRepository,
+  GoalRepository,
+  DocumentSessionRepository,
+  SectionProgressRepository,
+} from '../db/supabase/repositories';
 import { tutorOrchestrator } from '../orchestrator/tutor-orchestrator';
 import { GeminiLiveProvider, GeminiSession } from '../ai/providers/gemini-live.provider';
 import { createChildLogger } from '../utils/logger';
