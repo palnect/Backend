@@ -104,8 +104,27 @@ export class TutorOrchestrator {
       ? `\nLearner identity: ${profile.learner_type.replace('_', ' ')}. Calibrate your vocabulary, depth, and tone accordingly.`
       : '';
 
-    const sourceMaterialSection = context.sourceMaterial
+    const sourceMaterialSection = context.sourceMaterial && !context.isDocMode
       ? `\nThe student has provided the following reference material for this session — ground your teaching in it:\n---\n${context.sourceMaterial.slice(0, 3000)}\n---`
+      : '';
+
+    const docModeSection = context.isDocMode && context.docSections && context.docSections.length > 0
+      ? `\nDOCUMENT STUDY MODE — CRITICAL INSTRUCTIONS:
+You are teaching from a document the student has uploaded. The document has been divided into the following sections:
+${context.docSections.map((s, i) => `  ${i + 1}. [${s.sectionId}] ${s.title} (page ${s.page})`).join('\n')}
+
+SECTION NAVIGATION RULES:
+1. Work through sections IN ORDER, one at a time.
+2. When you FINISH explaining a section, output the exact marker on its own: [HIGHLIGHT:PAGE:SECTION_ID]
+   Example: [HIGHLIGHT:3:p3-introduction-0]
+3. After the marker, ask: "Ready to move to the next section?"
+4. Do NOT emit the marker mid-sentence — only at the natural end of a section's explanation.
+5. If the student asks to skip or jump, move to that section and emit its marker immediately.
+6. Keep responses to 4-6 sentences per section, then pause for the student.
+7. The marker is system metadata invisible to the student — do not mention or describe it.
+${context.resumeSectionId
+  ? `\nRESUME: The student previously stopped at section "${context.resumeSectionId}". Start from there and greet them warmly.`
+  : '\nStart from the first section.'}`
       : '';
 
     const recentContext =
@@ -121,7 +140,7 @@ You are currently helping the student with: "${context.topic}"${context.field &&
 
 Current teaching mode: ${context.mode.toUpperCase()}
 ${modeInstruction}
-${learnerSection}${styleSection}${weakTopicsSection}${sourceMaterialSection}
+${learnerSection}${styleSection}${weakTopicsSection}${sourceMaterialSection}${docModeSection}
 
 CRITICAL RULES:
 - Keep responses SHORT for voice. Maximum 3-4 sentences per turn.

@@ -3,7 +3,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { createSessionSchema } from '../validators/session.validator';
-import { SessionRepository, MessageRepository, AnalysisRepository } from '../db/supabase/repositories';
+import { SessionRepository, MessageRepository, AnalysisRepository, DocumentSessionRepository, SectionProgressRepository } from '../db/supabase/repositories';
 import { SessionStore } from '../db/redis/session-store';
 import { sendSuccess, sendCreated, sendError } from '../utils/response';
 import { SessionAnalyzerAgent } from '../agents/session-analyzer.agent';
@@ -30,6 +30,57 @@ sessionRouter.post(
     }
 
     sendCreated(res, { topic, mode, message: 'Ready to connect via WebSocket at /realtime' });
+  })
+);
+
+// GET /session/doc-resume — check if user has a resumable doc session for same file+topic
+sessionRouter.get(
+  '/doc-resume',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.userId;
+    const fileName = req.query.fileName as string;
+    const topic = req.query.topic as string;
+
+    if (!fileName || !topic) {
+      sendError(res, 'fileName and topic are required', 400);
+      return;
+    }
+
+    const doc = await DocumentSessionRepository.findRecentByUserAndFile(userId, fileName, topic);
+    if (!doc || !doc.resume_section_id) {
+      sendSuccess(res, null);
+      return;
+    }
+
+    sendSuccess(res, {
+      resumeSectionId: doc.resume_section_id,
+      resumePage: doc.resume_page ?? 1,
+      priorSessionId: doc.session_id,
+    });
+  })
+);
+
+// GET /session/:id/doc-progress — get document session + section progress
+sessionRouter.get(
+  '/:id/doc-progress',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const userId = req.user!.userId;
+
+    const session = await SessionRepository.findById(id);
+    if (!session || session.user_id !== userId) {
+      sendError(res, 'Session not found', 404);
+      return;
+    }
+
+    const docSession = await DocumentSessionRepository.findBySessionId(id);
+    if (!docSession) {
+      sendSuccess(res, null);
+      return;
+    }
+
+    const sectionProgress = await SectionProgressRepository.findBySessionId(id);
+    sendSuccess(res, { docSession, sectionProgress });
   })
 );
 

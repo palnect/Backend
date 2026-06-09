@@ -426,7 +426,7 @@ export const sessionHandler = {
     await SectionProgressRepository.markInProgress(sessionId, sectionId);
     await DocSectionStore.setCurrentSection(sessionId, sectionId, page);
     await DocumentSessionRepository.updateResume(sessionId, sectionId, page);
-    send(socket, 'doc_section_update', { sessionId, sectionId, status: 'in_progress' });
+    send(_socket, 'doc_section_update', { sessionId, sectionId, status: 'in_progress' });
   },
 
   // ─── Cleanup ─────────────────────────────────────────────────────────────────
