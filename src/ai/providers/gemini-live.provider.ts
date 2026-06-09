@@ -115,8 +115,12 @@ export const createGeminiSession = async (
       },
 
       onclose: () => {
+        const wasIntentional = isClosed;
         isClosed = true;
         log.debug('Gemini Live session closed', { sessionId });
+        if (!wasIntentional) {
+          callbacks.onUnexpectedClose?.();
+        }
       },
     },
   });

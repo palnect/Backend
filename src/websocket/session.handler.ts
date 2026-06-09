@@ -18,6 +18,37 @@ const log = createChildLogger('ws:session');
 // Active AI sessions map: sessionId → GeminiSession
 const activeSessions = new Map<string, GeminiSession>();
 
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_BASE_DELAY_MS = 1000;
+
+async function attemptReconnect(
+  socket: AuthenticatedWS,
+  sessionId: string,
+  providerConfig: Parameters<typeof GeminiLiveProvider.createSession>[1],
+  callbacks: Parameters<typeof GeminiLiveProvider.createSession>[2],
+  attempt = 1
+): Promise<void> {
+  const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+  await new Promise((r) => setTimeout(r, delay));
+
+  try {
+    log.info('Reconnecting Gemini Live session', { sessionId, attempt });
+    const newSession = await GeminiLiveProvider.createSession(sessionId, providerConfig, callbacks);
+    activeSessions.set(sessionId, newSession);
+    send(socket, 'session_reconnected', { sessionId });
+    log.info('Gemini Live session reconnected', { sessionId, attempt });
+  } catch (err) {
+    log.error('Reconnect attempt failed', { err, sessionId, attempt });
+    if (attempt < MAX_RECONNECT_ATTEMPTS) {
+      await attemptReconnect(socket, sessionId, providerConfig, callbacks, attempt + 1);
+    } else {
+      log.error('All reconnect attempts exhausted', { sessionId });
+      send(socket, 'error', { message: 'Connection to AI lost. Please start a new session.', sessionId });
+      activeSessions.delete(sessionId);
+    }
+  }
+}
+
 export const sessionHandler = {
   async handle(socket: AuthenticatedWS, msg: WSMessage): Promise<void> {
     const { type, payload, sessionId } = msg;
@@ -74,62 +105,72 @@ export const sessionHandler = {
 
       const systemPrompt = tutorOrchestrator.buildSystemPrompt(context);
 
+      const providerConfig = {
+        model: 'gemini-3.1-flash-live-preview',
+        systemInstruction: systemPrompt,
+        responseModality: 'audio' as const,
+        voiceConfig: { voiceName: 'Aoede' },
+      };
+
+      const streamCallbacks = {
+        onAudioChunk: (data: string, mimeType: string) => {
+          send(socket, 'ai_audio_chunk', { data, mimeType, sessionId });
+        },
+
+        onTextToken: (token: string) => {
+          send(socket, 'ai_token', { token, sessionId });
+          StreamBuffer.append(sessionId, token).catch(() => {});
+        },
+
+        onInputTranscript: (text: string) => {
+          send(socket, 'partial_transcript', { text, role: 'user', sessionId });
+          MessageRepository.create({
+            session_id: sessionId,
+            role: 'user',
+            content: text,
+            content_type: 'audio_transcript',
+          }).catch((err) => log.error('Failed to persist user message', { err }));
+          ContextStore.appendMessage(sessionId, 'user', text).catch(() => {});
+        },
+
+        onOutputTranscript: async (text: string) => {
+          send(socket, 'final_transcript', { text, role: 'assistant', sessionId });
+          MessageRepository.create({
+            session_id: sessionId,
+            role: 'assistant',
+            content: text,
+            content_type: 'audio_transcript',
+          }).catch((err) => log.error('Failed to persist AI message', { err }));
+          await ContextStore.appendMessage(sessionId, 'assistant', text);
+          await SessionRepository.incrementMessageCount(sessionId);
+        },
+
+        onInterrupted: () => {
+          send(socket, 'interruption', { sessionId, source: 'ai' });
+          StreamBuffer.clear(sessionId).catch(() => {});
+          log.debug('AI interrupted', { sessionId });
+        },
+
+        onTurnComplete: () => {
+          send(socket, 'ai_turn_complete', { sessionId });
+        },
+
+        onError: (err: Error) => {
+          log.error('AI provider error', { err, sessionId });
+          send(socket, 'error', { message: 'AI error: ' + err.message, sessionId });
+        },
+
+        onUnexpectedClose: () => {
+          log.warn('Gemini Live session dropped unexpectedly, reconnecting', { sessionId });
+          send(socket, 'session_reconnecting', { sessionId });
+          attemptReconnect(socket, sessionId, providerConfig, streamCallbacks).catch(() => {});
+        },
+      };
+
       const geminiSession = await GeminiLiveProvider.createSession(
         sessionId,
-        {
-          model: 'gemini-3.1-flash-live-preview',
-          systemInstruction: systemPrompt,
-          responseModality: 'audio',
-          voiceConfig: { voiceName: 'Aoede' },
-        },
-        {
-          onAudioChunk: (data, mimeType) => {
-            send(socket, 'ai_audio_chunk', { data, mimeType, sessionId });
-          },
-
-          onTextToken: (token) => {
-            send(socket, 'ai_token', { token, sessionId });
-            StreamBuffer.append(sessionId, token).catch(() => {});
-          },
-
-          onInputTranscript: (text) => {
-            send(socket, 'partial_transcript', { text, role: 'user', sessionId });
-            MessageRepository.create({
-              session_id: sessionId,
-              role: 'user',
-              content: text,
-              content_type: 'audio_transcript',
-            }).catch((err) => log.error('Failed to persist user message', { err }));
-            ContextStore.appendMessage(sessionId, 'user', text).catch(() => {});
-          },
-
-          onOutputTranscript: async (text) => {
-            send(socket, 'final_transcript', { text, role: 'assistant', sessionId });
-            MessageRepository.create({
-              session_id: sessionId,
-              role: 'assistant',
-              content: text,
-              content_type: 'audio_transcript',
-            }).catch((err) => log.error('Failed to persist AI message', { err }));
-            await ContextStore.appendMessage(sessionId, 'assistant', text);
-            await SessionRepository.incrementMessageCount(sessionId);
-          },
-
-          onInterrupted: () => {
-            send(socket, 'interruption', { sessionId, source: 'ai' });
-            StreamBuffer.clear(sessionId).catch(() => {});
-            log.debug('AI interrupted', { sessionId });
-          },
-
-          onTurnComplete: () => {
-            send(socket, 'ai_turn_complete', { sessionId });
-          },
-
-          onError: (err) => {
-            log.error('AI provider error', { err, sessionId });
-            send(socket, 'error', { message: 'AI error: ' + err.message, sessionId });
-          },
-        }
+        providerConfig,
+        streamCallbacks,
       );
 
       activeSessions.set(sessionId, geminiSession);
