@@ -1,5 +1,5 @@
 import { getRedisClient } from './client';
-import { ConversationContext, TutoringMode } from '../../types';
+import { ConversationContext, TutoringMode, DocSection } from '../../types';
 import { config } from '../../config';
 import { createChildLogger } from '../../utils/logger';
 
@@ -14,6 +14,8 @@ const KEYS = {
   interruption: (sessionId: string) => `interrupt:${sessionId}`,
   userProfile: (userId: string) => `profile:${userId}`,
   otp: (email: string) => `otp:${email}`,
+  docSections: (sessionId: string) => `doc:${sessionId}:sections`,
+  docResume: (sessionId: string) => `doc:${sessionId}:resume`,
 };
 
 // ─── Session State ────────────────────────────────────────────────────────────
@@ -200,6 +202,54 @@ export const ProfileCache = {
 
   async invalidate(userId: string): Promise<void> {
     await getRedisClient().del(KEYS.userProfile(userId));
+  },
+};
+
+// ─── Doc Section Store ────────────────────────────────────────────────────────
+
+export const DocSectionStore = {
+  async setSections(sessionId: string, sections: DocSection[]): Promise<void> {
+    await getRedisClient().set(
+      KEYS.docSections(sessionId),
+      JSON.stringify(sections),
+      'EX',
+      config.session.ttlSeconds
+    );
+  },
+
+  async getSections(sessionId: string): Promise<DocSection[] | null> {
+    const raw = await getRedisClient().get(KEYS.docSections(sessionId));
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as DocSection[];
+    } catch {
+      return null;
+    }
+  },
+
+  async setCurrentSection(sessionId: string, sectionId: string, page: number): Promise<void> {
+    await getRedisClient().set(
+      KEYS.docResume(sessionId),
+      JSON.stringify({ sectionId, page }),
+      'EX',
+      config.session.ttlSeconds
+    );
+  },
+
+  async getCurrentSection(sessionId: string): Promise<{ sectionId: string; page: number } | null> {
+    const raw = await getRedisClient().get(KEYS.docResume(sessionId));
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  },
+
+  async remove(sessionId: string): Promise<void> {
+    const redis = getRedisClient();
+    await redis.del(KEYS.docSections(sessionId));
+    await redis.del(KEYS.docResume(sessionId));
   },
 };
 
