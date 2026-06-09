@@ -128,6 +128,8 @@ export type WSEventType =
   | 'interruption'
   | 'mode_change'
   | 'confusion_detected'
+  | 'session_reconnecting'
+  | 'session_reconnected'
   | 'error'
   | 'ping'
   | 'pong';
