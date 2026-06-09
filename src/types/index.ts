@@ -203,6 +203,7 @@ export interface AIStreamCallbacks {
   onInterrupted?: () => void;
   onTurnComplete?: () => void;
   onError?: (error: Error) => void;
+  onUnexpectedClose?: () => void;
 }
 
 // ─── Authenticated WebSocket ───────────────────────────────────────────────────
