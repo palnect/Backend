@@ -236,6 +236,9 @@ export interface ConversationContext {
   confusionScore: number;
   engagementScore: number;
   lastModeChange: number;
+  isDocMode?: boolean;
+  docSections?: DocSection[];
+  resumeSectionId?: string;
 }
 
 export interface ContextMessage {
