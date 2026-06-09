@@ -245,6 +245,7 @@ ${recentContext}`;
     mode: TutoringMode,
     profile: Partial<LearningProfile>,
     sourceMaterial?: string,
+    docContext?: { isDocMode?: boolean; docSections?: import('../types').DocSection[]; resumeSectionId?: string },
   ): Promise<ConversationContext> {
     const context: ConversationContext = {
       sessionId,
@@ -258,6 +259,7 @@ ${recentContext}`;
       confusionScore: 0,
       engagementScore: 0.5,
       lastModeChange: Date.now(),
+      ...(docContext ?? {}),
     };
 
     await ContextStore.set(context);

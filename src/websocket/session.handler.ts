@@ -102,7 +102,11 @@ export const sessionHandler = {
 
   // ─── Start Session ──────────────────────────────────────────────────────────
 
-  async startSession(socket: AuthenticatedWS, payload: WSSessionStartPayload): Promise<void> {
+  async startSession(
+    socket: AuthenticatedWS,
+    payload: WSSessionStartPayload,
+    docContext?: { isDocMode: boolean; docSections?: import('../types').DocSection[]; resumeSectionId?: string }
+  ): Promise<void> {
     const userId = socket.userId!;
     const sessionId = uuidv4();
 
@@ -118,6 +122,7 @@ export const sessionHandler = {
         (payload.mode as TutoringMode) ?? 'explain',
         profile ?? {},
         payload.sourceContext,
+        docContext,
       );
 
       const systemPrompt = tutorOrchestrator.buildSystemPrompt(context);
@@ -160,6 +165,26 @@ export const sessionHandler = {
           }).catch((err) => log.error('Failed to persist AI message', { err }));
           await ContextStore.appendMessage(sessionId, 'assistant', text);
           await SessionRepository.incrementMessageCount(sessionId);
+
+          // Parse [HIGHLIGHT:page:sectionId] markers emitted by Lexi in doc mode
+          const HIGHLIGHT_RE = /\[HIGHLIGHT:(\d+):([^\]]+)\]/g;
+          let match: RegExpExecArray | null;
+          while ((match = HIGHLIGHT_RE.exec(text)) !== null) {
+            const page = parseInt(match[1], 10);
+            const sectionId = match[2].trim();
+            send(socket, 'highlight_section', { sessionId, page, sectionId });
+            SectionProgressRepository.markDone(sessionId, sectionId).catch(() => {});
+            DocSectionStore.setCurrentSection(sessionId, sectionId, page).catch(() => {});
+            DocumentSessionRepository.updateResume(sessionId, sectionId, page).catch(() => {});
+            // Update done count on linked goal
+            DocumentSessionRepository.findBySessionId(sessionId).then(async (doc) => {
+              if (!doc?.linked_goal_id) return;
+              const done = await SectionProgressRepository.getDoneCount(sessionId);
+              GoalRepository.update(doc.linked_goal_id, socket.userId!, {
+                doc_sections_done: done,
+              }).catch(() => {});
+            }).catch(() => {});
+          }
         },
 
         onInterrupted: () => {
@@ -315,6 +340,95 @@ export const sessionHandler = {
     }
   },
 
+  // ─── Doc Session Start ───────────────────────────────────────────────────────
+
+  async startDocSession(socket: AuthenticatedWS, payload: WSDocSessionStartPayload): Promise<void> {
+    const userId = socket.userId!;
+    try {
+      // Re-use startSession core logic, but pass doc context
+      await this.startSession(socket, payload, {
+        isDocMode: true,
+        docSections: payload.sections,
+        resumeSectionId: payload.resumeFromSectionId,
+      });
+
+      // socket.sessionId is now set by startSession
+      const sessionId = socket.sessionId!;
+
+      // Store section manifest in Redis
+      await DocSectionStore.setSections(sessionId, payload.sections);
+      if (payload.resumeFromSectionId) {
+        const resumeSection = payload.sections.find(s => s.sectionId === payload.resumeFromSectionId);
+        await DocSectionStore.setCurrentSection(sessionId, payload.resumeFromSectionId, resumeSection?.page ?? 1);
+      }
+
+      // Pre-populate section progress rows as not_started
+      for (const section of payload.sections) {
+        SectionProgressRepository.upsert({
+          session_id: sessionId,
+          user_id: userId,
+          section_id: section.sectionId,
+          section_title: section.title,
+          page: section.page,
+          status: 'not_started',
+        }).catch(() => {});
+      }
+
+      // Create document_sessions row
+      await DocumentSessionRepository.create({
+        session_id: sessionId,
+        user_id: userId,
+        file_name: payload.fileName,
+        file_type: payload.fileType,
+        total_sections: payload.sections.length,
+        total_pages: payload.totalPages,
+      });
+
+      // Auto-create learning_goal linked to this doc session
+      const today = new Date().toISOString().split('T')[0];
+      const field = (await ProfileRepository.findByUserId(userId))?.field ?? 'General';
+      const goal = await GoalRepository.create({
+        user_id: userId,
+        title: `Study: ${payload.topic} — ${payload.fileName}`,
+        field,
+        scheduled_date: today,
+        linked_session_id: sessionId,
+        doc_session_id: sessionId,
+        doc_sections_total: payload.sections.length,
+        doc_sections_done: 0,
+      });
+
+      await DocumentSessionRepository.linkGoal(sessionId, goal.id);
+
+      // Patch the already-sent session_start event with doc-mode extras
+      send(socket, 'session_start', {
+        sessionId,
+        topic: payload.topic,
+        field,
+        mode: payload.mode ?? 'explain',
+        docMode: true,
+        goalId: goal.id,
+        sections: payload.sections,
+        resumeSection: payload.resumeFromSectionId,
+      });
+
+      log.info('Doc session started', { sessionId, userId, fileName: payload.fileName, sections: payload.sections.length });
+    } catch (err) {
+      log.error('Failed to start doc session', { err, userId });
+      send(socket, 'error', { message: 'Failed to start document session' });
+    }
+  },
+
+  // ─── Doc Section Ack ─────────────────────────────────────────────────────────
+
+  async ackSection(_socket: AuthenticatedWS, sessionId: string, payload: WSDocSectionAckPayload): Promise<void> {
+    const { sectionId, page } = payload;
+    await SectionProgressRepository.markInProgress(sessionId, sectionId);
+    await DocSectionStore.setCurrentSection(sessionId, sectionId, page);
+    await DocumentSessionRepository.updateResume(sessionId, sectionId, page);
+    send(socket, 'doc_section_update', { sessionId, sectionId, status: 'in_progress' });
+  },
+
   // ─── Cleanup ─────────────────────────────────────────────────────────────────
 
   async cleanupSession(sessionId: string, userId: string): Promise<void> {
@@ -338,6 +452,18 @@ export const sessionHandler = {
       await SessionRepository.end(sessionId);
       await ProfileRepository.updateStreak(userId);
       await SessionStore.remove(sessionId, userId);
+
+      // Doc session: finalize goal progress and auto-complete if all sections done
+      const docSession = await DocumentSessionRepository.findBySessionId(sessionId);
+      if (docSession?.linked_goal_id) {
+        const done = await SectionProgressRepository.getDoneCount(sessionId);
+        const isComplete = done >= docSession.total_sections && docSession.total_sections > 0;
+        await GoalRepository.update(docSession.linked_goal_id, userId, {
+          doc_sections_done: done,
+          ...(isComplete ? { completed_at: new Date().toISOString() } : {}),
+        });
+      }
+      await DocSectionStore.remove(sessionId);
 
       log.info('Session cleaned up', { sessionId, userId });
     } catch (err) {
