@@ -67,6 +67,14 @@ export const sessionHandler = {
         await this.startSession(socket, payload as WSSessionStartPayload);
         break;
 
+      case 'doc_session_start':
+        await this.startDocSession(socket, payload as WSDocSessionStartPayload);
+        break;
+
+      case 'doc_section_ack':
+        if (sessionId) await this.ackSection(socket, sessionId, payload as WSDocSectionAckPayload);
+        break;
+
       case 'session_end':
         if (sessionId) await this.endSession(socket, sessionId);
         break;
